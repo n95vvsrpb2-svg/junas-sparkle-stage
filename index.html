@@ -379,6 +379,7 @@
     <div class="view-text" id="viewText"></div>
     <div class="view-stamps" id="viewStamps"></div>
     <div class="modalactions">
+      <button class="btn-primary" id="readAloudBtn">🔊 Read to me</button>
       <button class="btn-secondary" id="editFromView">✏️ Edit</button>
       <button class="btn-secondary" id="closeViewBtn2">Close</button>
     </div>
@@ -605,18 +606,70 @@ function openView(id){
   const img = document.getElementById('viewImg');
   if(p.image){ img.src = p.image; img.style.display='block'; } else { img.style.display='none'; }
   document.getElementById('viewStamps').textContent = (p.stickers||[]).join(' ');
-  document.getElementById('editFromView').onclick = () => { document.getElementById('viewOverlay').classList.remove('show'); openEditor(p); };
+  document.getElementById('editFromView').onclick = () => { stopReading(); document.getElementById('viewOverlay').classList.remove('show'); openEditor(p); };
   document.getElementById('viewOverlay').classList.add('show');
+  resetReadBtn();
 }
-document.getElementById('closeView').addEventListener('click', () => document.getElementById('viewOverlay').classList.remove('show'));
-document.getElementById('closeViewBtn2').addEventListener('click', () => document.getElementById('viewOverlay').classList.remove('show'));
-document.getElementById('viewOverlay').addEventListener('click', e => { if(e.target.id==='viewOverlay') document.getElementById('viewOverlay').classList.remove('show'); });
+document.getElementById('closeView').addEventListener('click', () => { stopReading(); document.getElementById('viewOverlay').classList.remove('show'); });
+document.getElementById('closeViewBtn2').addEventListener('click', () => { stopReading(); document.getElementById('viewOverlay').classList.remove('show'); });
+document.getElementById('viewOverlay').addEventListener('click', e => { if(e.target.id==='viewOverlay'){ stopReading(); document.getElementById('viewOverlay').classList.remove('show'); } });
 
 document.addEventListener('keydown', e => {
   if(e.key === 'Escape'){
+    stopReading();
     document.getElementById('editorOverlay').classList.remove('show');
     document.getElementById('viewOverlay').classList.remove('show');
   }
+});
+
+// ---------- Read Aloud ----------
+const synth = window.speechSynthesis;
+let pickedVoice = null;
+
+function pickVoice(){
+  if(!synth) return null;
+  const voices = synth.getVoices();
+  if(!voices.length) return null;
+  // prefer a friendly-sounding English voice
+  return voices.find(v => /female/i.test(v.name) && /en/i.test(v.lang))
+      || voices.find(v => /en/i.test(v.lang))
+      || voices[0];
+}
+if(synth){
+  synth.onvoiceschanged = () => { pickedVoice = pickVoice(); };
+  pickedVoice = pickVoice();
+}
+
+function resetReadBtn(){
+  const btn = document.getElementById('readAloudBtn');
+  btn.textContent = '🔊 Read to me';
+}
+
+function stopReading(){
+  if(synth && synth.speaking) synth.cancel();
+  resetReadBtn();
+}
+
+document.getElementById('readAloudBtn').addEventListener('click', () => {
+  if(!synth){
+    showToast("This browser can't read aloud 😥");
+    return;
+  }
+  const btn = document.getElementById('readAloudBtn');
+  if(synth.speaking){
+    stopReading();
+    return;
+  }
+  const title = document.getElementById('viewTitle').textContent;
+  const text = document.getElementById('viewText').textContent;
+  const utter = new SpeechSynthesisUtterance(`${title}. ${text}`);
+  utter.rate = 0.92;
+  utter.pitch = 1.15;
+  if(pickedVoice) utter.voice = pickedVoice;
+  utter.onend = resetReadBtn;
+  utter.onerror = resetReadBtn;
+  btn.textContent = '⏹ Stop reading';
+  synth.speak(utter);
 });
 
 loadPosts();
